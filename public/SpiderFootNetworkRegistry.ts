@@ -52,10 +52,21 @@ export interface SpiderFootNetworkRegistration {
     visibility?: SpiderFootVisibility;
 }
 
+export interface RegisteredSpiderFootNetworkTarget {
+    sourceKey: string;
+    ip: string;
+    domain?: string;
+    name?: string;
+    visibility: Required<SpiderFootVisibility>;
+}
+
 const visibilityBySourceKey = new Map<string, Required<SpiderFootVisibility>>();
 const sourceKeyByIp = new Map<string, string>();
 const sourceKeyByDomain = new Map<string, string>();
 const sourceKeyByName = new Map<string, string>();
+
+const registeredTargetsBySourceKey =
+    new Map<string, RegisteredSpiderFootNetworkTarget>();
 
 function normalize(value: unknown): string {
     return String(value ?? "").trim().toLowerCase();
@@ -86,12 +97,11 @@ export function registerSpiderFootNetworkTarget(
     if (!sourceKey || !ip) {
         return;
     }
-
-    visibilityBySourceKey.set(
-        sourceKey,
-        normalizeSpiderFootVisibility(registration.visibility),
+    const visibility = normalizeSpiderFootVisibility(
+        registration.visibility,
     );
 
+    visibilityBySourceKey.set(sourceKey, visibility);
     sourceKeyByIp.set(ip, sourceKey);
 
     if (domain) {
@@ -101,6 +111,35 @@ export function registerSpiderFootNetworkTarget(
     if (name) {
         sourceKeyByName.set(name, sourceKey);
     }
+
+    registeredTargetsBySourceKey.set(sourceKey, {
+        sourceKey,
+        ip,
+        domain: domain || undefined,
+        name: name || undefined,
+        visibility,
+    });
+}
+
+export function findRegisteredSpiderFootNetworkTarget(
+    query: string,
+): RegisteredSpiderFootNetworkTarget | undefined {
+    const normalizedQuery = normalize(query);
+
+    if (!normalizedQuery) {
+        return undefined;
+    }
+
+    const sourceKey =
+        sourceKeyByDomain.get(normalizedQuery) ??
+        sourceKeyByIp.get(normalizedQuery) ??
+        sourceKeyByName.get(normalizedQuery);
+
+    if (!sourceKey) {
+        return undefined;
+    }
+
+    return registeredTargetsBySourceKey.get(sourceKey);
 }
 
 export function resolveSpiderFootNetworkVisibility(args: {
