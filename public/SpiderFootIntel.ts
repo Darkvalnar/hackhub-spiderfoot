@@ -9,6 +9,7 @@ import {
     DEFAULT_SPIDERFOOT_VISIBILITY,
     type SpiderFootCategory,
     type SpiderFootVisibility,
+    findRegisteredSpiderFootNetworkTarget,
     resolveSpiderFootNetworkVisibility,
     normalizeSpiderFootVisibility,
 } from "./SpiderFootNetworkRegistry";
@@ -498,6 +499,52 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
         return results;
     }
 
+    const registeredTarget =
+        findRegisteredSpiderFootNetworkTarget(search);
+
+    if (registeredTarget?.visibility.surface) {
+        const visibility = registeredTarget.visibility;
+
+        if (
+            visibility.surfaceInfrastructure &&
+            visibility.surfaceIps
+        ) {
+            push(
+                results,
+                "infrastructure",
+                registeredTarget.ip,
+            );
+        }
+
+        if (
+            visibility.surfaceInfrastructure &&
+            visibility.surfaceDomains &&
+            registeredTarget.domain
+        ) {
+            push(
+                results,
+                "infrastructure",
+                registeredTarget.domain,
+            );
+        }
+
+        if (visibility.surfaceReferences) {
+            if (registeredTarget.domain) {
+                push(
+                    results,
+                    "references",
+                    `Network record associated with ${registeredTarget.domain}`,
+                );
+            } else if (registeredTarget.name) {
+                push(
+                    results,
+                    "references",
+                    `Network record associated with ${registeredTarget.name}`,
+                );
+            }
+        }
+    }
+
     for (const subnet of Network.getAllSubnets()) {
         const anySubnet = subnet as any;
         const domain = anySubnet.domain?.name;
@@ -512,17 +559,33 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
             continue;
         }
 
-        const subnetMatchesIp = exactIp && normalize(anySubnet.ip) === search;
-        const subnetMatchesDomain = Boolean(domain) && normalize(domain) === search;
-        const subnetMatchesName = Boolean(name) && normalize(name) === search;
-        const subnetMatches = subnetMatchesIp || subnetMatchesDomain || subnetMatchesName;
+        const subnetMatchesIp =
+            exactIp && normalize(anySubnet.ip) === search;
+
+        const subnetMatchesDomain =
+            Boolean(domain) && normalize(domain) === search;
+
+        const subnetMatchesName =
+            Boolean(name) && normalize(name) === search;
+
+        const subnetMatches =
+            subnetMatchesIp ||
+            subnetMatchesDomain ||
+            subnetMatchesName;
 
         if (subnetMatches) {
-            if (visibility.surfaceInfrastructure && visibility.surfaceIps) {
+            if (
+                visibility.surfaceInfrastructure &&
+                visibility.surfaceIps
+            ) {
                 push(results, "infrastructure", anySubnet.ip);
             }
 
-            if (visibility.surfaceInfrastructure && visibility.surfaceDomains && domain) {
+            if (
+                visibility.surfaceInfrastructure &&
+                visibility.surfaceDomains &&
+                domain
+            ) {
                 push(results, "infrastructure", domain);
             }
 
@@ -536,16 +599,25 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
             }
 
             if (visibility.surfaceReferences && domain) {
-                push(results, "references", `Network record associated with ${domain}`);
+                push(
+                    results,
+                    "references",
+                    `Network record associated with ${domain}`,
+                );
             } else if (visibility.surfaceReferences && name) {
-                push(results, "references", `Network record associated with ${name}`);
+                push(
+                    results,
+                    "references",
+                    `Network record associated with ${name}`,
+                );
             }
         }
 
         for (const user of anySubnet.users ?? []) {
             const anyUser = user as any;
             const email = anyUser.email?.address;
-            const emailMatches = exactEmail && normalize(email) === search;
+            const emailMatches =
+                exactEmail && normalize(email) === search;
 
             if (!emailMatches && !subnetMatches) {
                 continue;
@@ -556,7 +628,10 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
                 anyUser.lastName,
             ]).join(" ");
 
-            if (visibility.surfaceNetworkUsers && visibility.surfaceContacts) {
+            if (
+                visibility.surfaceNetworkUsers &&
+                visibility.surfaceContacts
+            ) {
                 push(results, "contacts", fullName);
             }
 
@@ -566,20 +641,40 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
 
             if (visibility.surfaceSocial && fullName) {
                 for (const socialResult of searchTwotter(fullName)) {
-                    push(results, socialResult.category, socialResult.value);
+                    push(
+                        results,
+                        socialResult.category,
+                        socialResult.value,
+                    );
                 }
             }
 
-            if (visibility.surfaceInfrastructure && visibility.surfaceIps) {
+            if (
+                visibility.surfaceInfrastructure &&
+                visibility.surfaceIps
+            ) {
                 push(results, "infrastructure", anySubnet.ip);
             }
 
-            if (visibility.surfaceInfrastructure && visibility.surfaceDomains && domain) {
+            if (
+                visibility.surfaceInfrastructure &&
+                visibility.surfaceDomains &&
+                domain
+            ) {
                 push(results, "infrastructure", domain);
             }
 
-            if (visibility.surfaceReferences && domain && (fullName || anyUser.username || email)) {
-                push(results, "references", `${fullName || anyUser.username || email} is listed on ${domain}`);
+            if (
+                visibility.surfaceNetworkUsers &&
+                visibility.surfaceReferences &&
+                domain &&
+                (fullName || email)
+            ) {
+                push(
+                    results,
+                    "references",
+                    `${fullName || email} is listed on ${domain}`,
+                );
             }
         }
     }
