@@ -1,3 +1,5 @@
+
+
 # Network Target Registration
 
 ## Documentation Pages
@@ -58,7 +60,7 @@ registerSpiderFootNetworkTarget({
 
 ## What Network Registration Stores
 
-`registerSpiderFootNetworkTarget(...)` stores visibility data and lookup mappings.
+`registerSpiderFootNetworkTarget(...)` stores the registered target and its visibility settings in memory.
 
 It does not create a network device, website, page, or document.
 
@@ -68,6 +70,11 @@ Internally it stores:
 - `ip -> sourceKey`
 - `domain -> sourceKey`
 - `name -> sourceKey`
+- `sourceKey -> registered target`
+
+The stored target contains its registered IP, optional domain, optional name, and normalized visibility settings.  
+  
+This allows SpiderFoot to surface a registered target immediately when the player searches its exact IP, domain, or name. It does not need to wait for a newly created HackHub network to become available through `Network.getAllSubnets()`.
 
 Visibility lookup order is:
 
@@ -85,13 +92,32 @@ Visibility lookup order is:
 
 ## Creating a Network Target with the HackHub SDK
 
-SpiderFoot searches subnets returned by:
+`registerSpiderFootNetworkTarget(...)` registers a network target with SpiderFoot. It does not create the actual HackHub network device.
 
-```ts
+When a target should exist as a connectable or hackable network, create it with the HackHub `Network` API and then register the same target with SpiderFoot.
+
+These two operations serve different purposes:
+
+- `Network.createSubnetNetwork(...)` creates the actual in-game network device.
+- `registerSpiderFootNetworkTarget(...)` controls whether and how that network can be surfaced through SpiderFoot.
+
+SpiderFoot stores the IP, domain, name, and visibility settings passed to `registerSpiderFootNetworkTarget(...)`. This allows exact searches for the registered IP, domain, or name to surface the target immediately.
+
+SpiderFoot also searches matching loaded subnets returned by:
+
+```
 Network.getAllSubnets()
 ```
 
-The network target must exist in the HackHub network system, and the SpiderFoot registration must match that network target.
+The loaded HackHub subnet provides additional network data such as:
+
+- location information
+- network users
+- user email addresses
+- social-profile correlations
+- other data stored on the subnet
+
+For a complete connectable or hackable target, the HackHub network and SpiderFoot registration should use the same IP, domain, and name.
 
 Example:
 
@@ -164,12 +190,110 @@ registerSpiderFootNetworkTarget({
 });
 ```
 
-Important:
+In this example:
 
-- The `ip` in the registration must match the network device IP.
-- The `domain` in the registration should match `domain.name` on the network device.
-- The `name` in the registration should match `name` on the network device if players should search by name.
-- Registering a name alone does not create a searchable network name. SpiderFoot compares the query to the actual subnet `name`.
+- `Network.createSubnetNetwork(...)` creates an actual network device.
+- `registerSpiderFootNetworkTarget(...)` does not create a second device.
+- The SpiderFoot registration associates the existing target with its OSINT visibility rules.
+- The same generated `dbIp` is passed to both functions, ensuring that SpiderFoot results refer to the actual HackHub network.
+
+### Immediate Registered-Target Results
+
+SpiderFoot can immediately match a target by its exact registered:
+
+- IP
+- domain
+- name
+
+For example:
+
+```
+spiderfoot db.example-bank.com
+```
+
+can immediately surface:
+
+```
+Infrastructure
+  <generated database IP>
+  db.example-bank.com
+```
+
+provided that:
+
+```
+surface: true
+surfaceInfrastructure: true
+surfaceIps: true
+surfaceDomains: true
+```
+
+are enabled.
+
+This immediate lookup uses the values supplied to `registerSpiderFootNetworkTarget(...)`. It does not require the newly created subnet to already be returned by `Network.getAllSubnets()`.
+
+### Loaded Subnet Results
+
+SpiderFoot also checks the actual HackHub subnet through `Network.getAllSubnets()`.
+
+Once the subnet is available there, SpiderFoot can use the data stored on the network device to surface additional information.
+
+Depending on the visibility configuration, this can include:
+
+- the subnet location
+- network-user names
+- network-user email addresses
+- Twotter profiles associated with network users
+- references connecting users to the network
+- the subnet IP and domain
+
+The directly registered target and the loaded HackHub subnet represent the same network. SpiderFoot removes duplicate results when both lookup paths return the same IP or domain.
+
+### Matching the Registration to the Network
+
+The values passed to `registerSpiderFootNetworkTarget(...)` should match the actual HackHub network:
+
+- `ip` should match the network device IP.
+- `domain` should match `domain.name` on the network device.
+- `name` should match `name` on the network device.
+- `sourceKey` should uniquely identify this SpiderFoot registration.
+
+Using the same values keeps immediate registered-target results consistent with results retrieved later from the loaded HackHub subnet.
+
+The `sourceKey` is an internal SpiderFoot identifier. It does not need to match the domain, IP, or network name, but it must be stable and unique within the mod.
+
+### Registering a SpiderFoot-Only Target
+
+A mod author may register a target with SpiderFoot without creating a HackHub subnet:
+
+```ts
+registerSpiderFootNetworkTarget({
+    sourceKey: "external-provider",
+    ip: "203.0.113.24",
+    domain: "status.example-provider.com",
+    name: "Example Provider",
+
+    visibility: {
+        surface: true,
+        surfaceInfrastructure: true,
+        surfaceDomains: true,
+        surfaceIps: true,
+        surfaceReferences: true,
+    },
+});
+```
+
+This makes the registered IP, domain, name, and network association searchable through SpiderFoot.
+
+However, because no HackHub subnet exists, the target will not be connectable or hackable, and SpiderFoot cannot retrieve subnet-only information such as:
+
+- network users
+- user email accounts
+- ports and services
+- subnet location data
+- other runtime network properties
+
+Use this approach only when the target is intended to exist as OSINT information rather than as an actual in-game network device.
 
 ---
 
@@ -192,6 +316,16 @@ spiderfoot db.example-bank.com
 spiderfoot Company Database
 spiderfoot db.view@example-bank.com
 ```
+
+SpiderFoot first checks targets registered directly through `registerSpiderFootNetworkTarget(...)`.  
+  
+A direct registered-target match can immediately surface:  
+  
+- the registered IP when `surfaceInfrastructure` and `surfaceIps` are enabled  
+- the registered domain when `surfaceInfrastructure` and `surfaceDomains` are enabled  
+- a network association reference when `surfaceReferences` is enabled  
+  
+SpiderFoot then checks loaded HackHub subnets through `Network.getAllSubnets()` for additional subnet information.
 
 When the subnet itself matches by IP, domain, or name:
 
