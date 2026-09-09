@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -79,8 +81,6 @@ spiderfoot: {
 }
 ```
 
----
-
 ## Common Network Configurations
 
 ### Hidden Network Target
@@ -142,5 +142,3 @@ registerSpiderFootNetworkTarget({
     },
 });
 ```
-
----

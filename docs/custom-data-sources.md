@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -20,19 +22,19 @@
 
 ## Custom SpiderFoot Data Sources
 
-SpiderFoot data sources are plain TypeScript functions that return `SpiderFootResult[]`.
-
-The three built-in sources in the raw files are:
+SpiderFoot searches these built-in sources on every query:
 
 ```ts
 return uniqueResults([
     ...searchTwotter(clean),
     ...searchWebDocuments(clean),
     ...searchNetworkExact(clean),
+    ...searchPhoneBook(clean),
+    ...searchRegisteredSpiderFootIntel(clean),
 ]);
 ```
 
-To add another source, create a function in `SpiderFootIntel.ts` that accepts the normalized query and returns results using the existing SpiderFoot categories:
+You do not add sources by editing that list. Register your data instead, using the SpiderFoot categories:
 
 ```ts
 "social"
@@ -42,9 +44,49 @@ To add another source, create a function in `SpiderFootIntel.ts` that accepts th
 "references"
 ```
 
-Then add that function to the `uniqueResults([...])` list.
+`references` is reserved for reachable website HTML. `registerSpiderFootIntel()` drops results in that category; use `registerSpiderFootDocument()` if you want a page to produce Web References.
 
-Custom sources are mod code. They are not a HackHub SDK API. They use the same result shape that SpiderFoot already prints through `SpiderFootCommand.ts`.
+For static data, register it once at mod load:
+
+```ts
+import { registerSpiderFootIntel } from "./world/SpiderFootIntel";
+
+registerSpiderFootIntel({
+    keys: ["mara vale", "m vale", "@m_vale"],
+    match: "loose",
+    results: [
+        { category: "contacts", value: "Mara Vale" },
+        { category: "social", value: "@m_vale" },
+    ],
+});
+```
+
+`match` controls how a query reaches the entry:
+
+| Mode | Behavior |
+|---|---|
+| `"exact"` *(default)* | The query must equal one of `keys` |
+| `"contains"` | A key appears somewhere in the query, so `harbor logistics ltd` still finds `harbor logistics` |
+| `"loose"` | The query and a key contain one another, in either direction. Also matches partial typing like `harbor` |
+
+`contains` and `loose` ignore queries and keys shorter than three characters, so a one-letter search never matches everything. Pick `contains` when your keys are full names or domains the player might type extra words around; pick `loose` when you also want partial input to find the record. The short form `registerSpiderFootIntel("mara vale", results)` registers a single exact key.
+
+For data that changes during play, register a search hook. It runs immediately before every search, so you can re-register entries that depend on current game state:
+
+```ts
+import { registerSpiderFootSearchHook, registerSpiderFootIntel } from "./world/SpiderFootIntel";
+
+registerSpiderFootSearchHook(() => {
+    registerSpiderFootIntel({
+        keys: ["harbor ops"],
+        results: currentHarborContacts(),
+    });
+});
+```
+
+A hook that throws is skipped; it does not stop the search or the other hooks.
+
+Use `unregisterSpiderFootIntel(key)` to withdraw an entry. It matches any of the entry's keys, not just the first.
 
 ---
 
@@ -52,148 +94,56 @@ Custom sources are mod code. They are not a HackHub SDK API. They use the same r
 
 This example adds a simple phone book. It lets players search a person's name, alias, organization, role, or phone number and return the in-game phone number under `Contacts`.
 
-Add this in `SpiderFootIntel.ts`, near the other search functions:
+The phone book is a built-in source. You register listings; you do not write the search function.
 
 ```ts
-interface SpiderFootPhoneBookListing {
-    name: string;
-    phoneNumber: string;
-    aliases?: string[];
-    organization?: string;
-    role?: string;
-    location?: string;
-    website?: string;
-    visibility?: SpiderFootVisibility;
-}
+import { registerSpiderFootPhoneBookListing } from "./world/SpiderFootIntel";
 
-const PHONE_BOOK_LISTINGS: SpiderFootPhoneBookListing[] = [
-    {
-        name: "Mara Vale",
-        phoneNumber: "555-0134",
-        aliases: ["mara", "m vale"],
-        organization: "Example Bank",
-        role: "Vendor Accounts Manager",
-        location: "Port Azure, In-Game",
-        website: "example-bank.com",
-        visibility: {
-            surface: true,
-            surfaceContacts: true,
-            surfaceInfrastructure: true,
-            surfaceDomains: true,
-            surfaceLocations: true,
-            surfaceReferences: true,
-        },
+registerSpiderFootPhoneBookListing({
+    name: "Mara Vale",
+    phoneNumber: "555-0134",
+    aliases: ["mara", "m vale"],
+    organization: "Example Bank",
+    role: "Chief Financial Officer",
+    location: "Port Azure, In-Game",
+    website: "example-bank.com",
+    visibility: {
+        surface: true,
+        surfaceContacts: true,
+        surfaceInfrastructure: true,
+        surfaceDomains: true,
+        surfaceLocations: true,
+        surfaceReferences: true,
     },
-    {
-        name: "Dorian Knox",
-        phoneNumber: "555-0198",
-        aliases: ["d knox"],
-        organization: "Example Bank",
-        role: "Security Desk",
-        website: "security.example-bank.com",
-        visibility: {
-            surface: true,
-            surfaceContacts: true,
-            surfaceInfrastructure: true,
-            surfaceDomains: true,
-            surfaceReferences: true,
-        },
+});
+
+registerSpiderFootPhoneBookListing({
+    name: "Dorian Knox",
+    phoneNumber: "555-0198",
+    aliases: ["d knox"],
+    organization: "Example Bank",
+    role: "Security Desk",
+    website: "security.example-bank.com",
+    visibility: {
+        surface: true,
+        surfaceContacts: true,
+        surfaceInfrastructure: true,
+        surfaceDomains: true,
+        surfaceReferences: true,
     },
-];
+});
 ```
 
-Then add the search function:
+A listing is matched when the query appears anywhere in its name, phone number, location, or aliases. Listings are keyed by `phoneNumber`, falling back to `name`, so registering the same number twice replaces the earlier listing. Remove one with `unregisterSpiderFootPhoneBookListing("555-0134")`.
 
-```ts
-function searchPhoneBook(query: string): SpiderFootResult[] {
-    const clean = normalize(query);
+Each field is gated by the listing's own visibility:
 
-    if (!clean) {
-        return [];
-    }
-
-    const results: SpiderFootResult[] = [];
-
-    for (const listing of PHONE_BOOK_LISTINGS) {
-        const visibility = normalizeSpiderFootVisibility(listing.visibility);
-
-        if (!visibility.surface) {
-            continue;
-        }
-
-        const searchable = compact([
-            listing.name,
-            listing.phoneNumber,
-            listing.organization,
-            listing.role,
-            listing.location,
-            listing.website,
-            ...(listing.aliases ?? []),
-        ]).join(" ").toLowerCase();
-
-        if (!searchable.includes(clean)) {
-            continue;
-        }
-
-        if (visibility.surfaceContacts) {
-            push(results, "contacts", listing.name);
-            push(results, "contacts", listing.phoneNumber);
-        }
-
-        if (
-            visibility.surfaceInfrastructure &&
-            visibility.surfaceDomains &&
-            listing.website
-        ) {
-            push(results, "infrastructure", listing.website);
-        }
-
-        if (visibility.surfaceLocations) {
-            push(results, "locations", listing.location);
-        }
-
-        if (visibility.surfaceReferences) {
-            push(
-                results,
-                "references",
-                `Phone book listing: ${listing.name}${
-                    listing.organization ? ` — ${listing.organization}` : ""
-                }`,
-            );
-
-            if (listing.role) {
-                push(results, "references", listing.role);
-            }
-        }
-    }
-
-    return results;
-}
-```
-
-Finally, add it to `searchSpiderFoot(query)`:
-
-```ts
-export function searchSpiderFoot(query: string): SpiderFootResult[] {
-    const clean = normalize(query);
-
-    if (!clean) {
-        return [];
-    }
-
-    return uniqueResults([
-        ...searchTwotter(clean),
-        ...searchWebDocuments(clean),
-        ...searchNetworkExact(clean),
-        ...searchPhoneBook(clean),
-    ]);
-}
-```
-
-The order matters only when duplicate category/value pairs exist. `uniqueResults(...)` keeps the first matching value and removes later duplicates.
-
----
-
+| Field | Requires |
+|---|---|
+| `name`, `phoneNumber` | `surfaceContacts` |
+| `website` | `surfaceInfrastructure` and `surfaceDomains` |
+| `location` | `surfaceLocations` |
+| `organization`, `role` | `surfaceReferences` |
 ### Phone Book Output Example
 
 With the listing above, running:
@@ -221,7 +171,7 @@ Locations
   Port Azure, In-Game
 
 Web References
-  Phone book listing: Mara Vale — Example Bank
+  Phone book listing: Mara Vale - Example Bank
   Vendor Accounts Manager
 ```
 
@@ -250,7 +200,7 @@ Locations
   Port Azure, In-Game
 
 Web References
-  Phone book listing: Mara Vale — Example Bank
+  Phone book listing: Mara Vale - Example Bank
   Vendor Accounts Manager
 ```
 
@@ -327,5 +277,3 @@ Examples:
 - internal HR records that should only expose selected fields
 
 Keep the source function small. It should only decide whether the query matches and then return normal SpiderFoot results.
-
----

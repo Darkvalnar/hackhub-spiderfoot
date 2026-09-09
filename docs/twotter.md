@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -71,5 +73,3 @@ Twotter.addUser(user);
 ```
 
 Twotter itself does not require a manifest permission.
-
----

@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -41,5 +43,3 @@ SpiderFoot searches:
 Duplicate results are removed by category and value.
 
 The phone book source is included in this mod as a customization example. The raw files in `public/` contain only the three built-in sources. See the **Custom SpiderFoot Data Sources** section for how the phone book was added and how to write your own sources.
-
----

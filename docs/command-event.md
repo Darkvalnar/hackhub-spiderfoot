@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -33,4 +35,4 @@ If no results are found, `results` is an empty array.
 
 This event can be used by quests or other systems that need to react when the player runs SpiderFoot.
 
----
+SpiderFoot also emits `SpiderFoot.Ready` once, when the mod finishes loading. Its payload carries the shared storage key names described below.

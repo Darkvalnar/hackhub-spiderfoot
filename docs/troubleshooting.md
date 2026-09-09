@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -34,5 +36,3 @@
 | Network target cannot be found by name | Confirm the actual network device `name` matches the searched name |
 | Network target cannot be found by domain | Confirm the actual network device has `domain: { name: "..." }` and the registration uses the same domain |
 | Network target cannot be found by IP | Confirm the registered IP matches the network device IP |
-
----

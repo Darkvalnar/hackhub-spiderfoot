@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -20,13 +22,16 @@
 
 ## Files
 
-SpiderFoot is implemented by three TypeScript files:
+SpiderFoot is implemented by four TypeScript files:
 
 | File | Purpose |
 |---|---|
 | `SpiderFootCommand.ts` | Registers the `spiderfoot` command and prints results |
 | `SpiderFootIntel.ts` | Searches Twotter, website documents, and registered network targets |
 | `SpiderFootNetworkRegistry.ts` | Defines visibility settings and registers network targets |
+| `SpiderFootBridge.ts` | Sends and receives targets between separate mods |
+
+The first three are all you need. `SpiderFootBridge.ts` is only for moving targets between separate mods.
 
 This mod places `SpiderFootCommand.ts` in a `commands` folder and the other two files in a `world` folder. That folder structure is not required. If the files are moved, update the relative imports between them.
 
@@ -42,9 +47,7 @@ import {
 
 If `SpiderFootIntel.ts` is not in `../world`, update that import.
 
-Clean raw copies of the three files — without demo content or the phone book source — are available in the `public/` folder. These are the recommended starting point for integrating SpiderFoot into your own mod.
-
----
+Clean raw copies of the three files, without demo content or the phone book source, are available in the `public/` folder. These are the recommended starting point for integrating SpiderFoot into your own mod.
 
 ## Required Manifest Permissions
 
@@ -62,5 +65,3 @@ Add these permissions to `manifest.json`:
 ```
 
 Twotter access does not require a manifest permission.
-
----

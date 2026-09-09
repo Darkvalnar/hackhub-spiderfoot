@@ -1,7 +1,5 @@
 # SpiderFoot Documentation
 
-SpiderFoot is a terminal command for discovering mod content from websites, Twotter profiles, and registered network targets.
-
 ## Documentation Pages
 
 - [SpiderFoot Documentation](index.md)
@@ -15,6 +13,8 @@ SpiderFoot is a terminal command for discovering mod content from websites, Twot
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -55,8 +55,6 @@ If nothing matches, the command prints:
 ```text
 No intelligence records found.
 ```
-
----
 
 ## Example Command Output
 
@@ -148,7 +146,7 @@ Locations
   Port Azure
 
 Web References
-  https://example-bank.com/ — Example Bank
+  https://example-bank.com/ - Example Bank
   Example Bank Public banking website for Example Bank. Example Bank Contact security@example-bank.com for security disclosures. Headquarters: Port Azure, In-Game. Follow @example_bank.
 ```
 
@@ -180,7 +178,7 @@ Locations
 No data found.
 
 Web References
-  https://example-bank.com/ — Example Bank
+  https://example-bank.com/ - Example Bank
   ...Contact security@example-bank.com for security disclosures...
 ```
 
@@ -212,11 +210,10 @@ Locations
 No data found.
 
 Web References
-  Executive at Example Bank.
-  Verified public profile
+No data found.
 ```
 
-`Verified public profile` appears only when the matched Twotter account is verified.
+Twotter profiles produce Social and Contacts entries only. Web References come from reachable website HTML, so a profile bio never appears there. If a website page mentions the same person, that page supplies the reference.
 
 ### Network Target Match
 
@@ -246,8 +243,9 @@ Locations
   Port Azure, In-Game
 
 Web References
-  Network record associated with db.example-bank.com
-  Database Viewer is listed on db.example-bank.com
+No data found.
 ```
 
 Network user names require both `surfaceNetworkUsers: true` and `surfaceContacts: true`. Network user email addresses require `surfaceEmails: true`.
+
+Network records never produce Web References. That section is reserved for reachable website HTML, so `surfaceReferences` has no effect on a network target. Surface the host as a site or a document if you want it to appear there.

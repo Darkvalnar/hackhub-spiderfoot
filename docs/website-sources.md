@@ -13,6 +13,8 @@
 - [Network Target Registration](network-targets.md)
 - [Common Configurations](common-configurations.md)
 - [Command Event](command-event.md)
+- [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md)
+- [Demo Content](demo-content.md)
 - [Troubleshooting](troubleshooting.md)
 - [Implementation Reference](implementation-reference.md)
 
@@ -20,40 +22,28 @@
 
 ## Website Sources
 
-SpiderFoot indexes website content from two sources:
+SpiderFoot indexes website content from three sources:
 
-1. Website classes listed in `WEBSITE_CLASSES`
-2. Entries in `SPIDERFOOT_INDEXED_SITES`
+1. Website classes registered with `registerSpiderFootWebsite()`
+2. Site entries registered with `registerSpiderFootSite()`
+3. Pre-rendered documents registered with `registerSpiderFootDocument()`
 
-These are separate paths.
-
----
+These are separate paths. Use (1) when your mod owns the `Website` class, (2) when a host should be searchable without a full website, and (3) when you are a separate mod publishing page content across the mod boundary.
 
 ## Registered Website Classes
 
-`SpiderFootIntel.ts` contains a `WEBSITE_CLASSES` list.
+Website classes are registered with `registerSpiderFootWebsite()`. You do not edit `SpiderFootIntel.ts`.
 
 ```ts
-const WEBSITE_CLASSES: WebsiteConstructor[] = [
-    NexaCorpSite,
-];
+import { registerSpiderFootWebsite } from "./world/SpiderFootIntel";
+import { ExampleBankWebsite } from "./websites/ExampleBankWebsite";
+
+registerSpiderFootWebsite(ExampleBankWebsite);
 ```
 
-To make your own website classes searchable, import them into `SpiderFootIntel.ts` and add them to `WEBSITE_CLASSES`.
+Call it once during mod load, before the player can run `spiderfoot`. Registering the same class twice is a no-op. `unregisterSpiderFootWebsite(ExampleBankWebsite)` removes it again.
 
-Example:
-
-```ts
-import { ExampleBankWebsite } from "../websites/ExampleBankWebsite";
-
-const WEBSITE_CLASSES: WebsiteConstructor[] = [
-    ExampleBankWebsite,
-];
-```
-
-The import path depends on where your website class is stored.
-
----
+Because this passes a constructor, it only works inside the mod that owns the class. If you are a **separate mod** feeding SpiderFoot, publish rendered pages instead. See [Depending on the SpiderFoot Mod](depending-on-spiderfoot.md).
 
 ## Website Page Indexing
 
@@ -122,7 +112,7 @@ With the default visibility settings, a matching SpiderFoot search may surface:
 - `security@example-bank.com` under Contacts
 - `@example_bank` under Social
 - `Port Azure, In-Game` under Locations
-- `https://example-bank.com/ — Example Bank` under Web References
+- `https://example-bank.com/ - Example Bank` under Web References
 
 ### Dynamic Page Example
 
@@ -171,52 +161,45 @@ SpiderFoot indexes the object returned from `metadata(context)`. The returned ob
 
 During SpiderFoot indexing, the metadata function receives an empty route/query context. Dynamic pages that require route parameters should provide fallback metadata if they need to appear in SpiderFoot.
 
----
-
 ## Website Visibility for Registered Website Classes
 
-For website classes, SpiderFoot looks for a matching entry in `SPIDERFOOT_INDEXED_SITES` by host or subdomain.
+For website classes, SpiderFoot looks for a registered site entry matching the class's `Host`, by host or subdomain.
+
+If a matching site entry exists, SpiderFoot uses that entry's `spiderfoot` visibility. If none exists, it uses the default visibility.
+
+So a website class and a site entry registered for the same host work together: the class supplies the pages, the entry supplies the visibility.
 
 ```ts
-findIndexedSiteByHost(site.Host)
-```
+import { registerSpiderFootSite, registerSpiderFootWebsite } from "./world/SpiderFootIntel";
+import { ExampleBankWebsite } from "./websites/ExampleBankWebsite";
 
-If a matching `SPIDERFOOT_INDEXED_SITES` entry exists, SpiderFoot uses that entry's `spiderfoot` visibility.
+registerSpiderFootWebsite(ExampleBankWebsite);
 
-If no matching entry exists, SpiderFoot uses the default visibility.
+registerSpiderFootSite({
+    host: "example-bank.com",
+    subdomains: ["vendors.example-bank.com"],
+    name: "Example Bank",
+    summary: "Public banking and vendor operations.",
+    owner: "Example Bank",
+    sector: "Finance",
+    capabilities: ["banking", "vendors", "payments"],
 
-Example `SPIDERFOOT_INDEXED_SITES` entry that controls visibility for a website class:
-
-```ts
-export const SPIDERFOOT_INDEXED_SITES: SpiderFootSiteEntry[] = [
-    {
-        host: "example-bank.com",
-        subdomains: ["vendors.example-bank.com"],
-        name: "Example Bank",
-        summary: "Public banking and vendor operations.",
-        owner: "Example Bank",
-        sector: "Finance",
-        capabilities: ["banking", "vendors", "payments"],
-
-        spiderfoot: {
-            surface: true,
-            surfaceSocial: true,
-            surfaceContacts: true,
-            surfaceEmails: true,
-            surfaceInfrastructure: true,
-            surfaceDomains: true,
-            surfaceIps: false,
-            surfaceLocations: true,
-            surfaceReferences: true,
-            surfaceNetworkUsers: false,
-        },
+    spiderfoot: {
+        surface: true,
+        surfaceSocial: true,
+        surfaceContacts: true,
+        surfaceEmails: true,
+        surfaceInfrastructure: true,
+        surfaceDomains: true,
+        surfaceIps: false,
+        surfaceLocations: true,
+        surfaceReferences: true,
+        surfaceNetworkUsers: false,
     },
-];
+});
 ```
 
----
-
-## SPIDERFOOT_INDEXED_SITES Indexing
+## Site Entry Indexing
 
 SpiderFoot also creates searchable documents directly from `SPIDERFOOT_INDEXED_SITES`.
 
@@ -250,39 +233,39 @@ The searchable keywords are:
 
 `SPIDERFOOT_INDEXED_SITES` entries do not use page-level `seo: true`. The `seo: true` requirement only applies to pages inside registered website classes listed in `WEBSITE_CLASSES`.
 
-### SPIDERFOOT_INDEXED_SITES-Only Example
+### Site-Entry-Only Example
 
 Use this when the target should appear in SpiderFoot but does not need a full website class.
 
 ```ts
-export const SPIDERFOOT_INDEXED_SITES: SpiderFootSiteEntry[] = [
-    {
-        host: "example-bank.com",
-        name: "Example Bank",
-        summary: "Public banking and payment services.",
-        owner: "Example Bank",
-        sector: "Finance",
-        capabilities: [
-            "banking",
-            "payments",
-            "customer portal",
-        ],
+import { registerSpiderFootSite } from "./world/SpiderFootIntel";
 
-        spiderfoot: {
-            surface: true,
-            surfaceEmails: true,
-            surfaceInfrastructure: true,
-            surfaceDomains: true,
-            surfaceIps: false,
-            surfaceReferences: true,
-        },
+registerSpiderFootSite({
+    host: "example-bank.com",
+    name: "Example Bank",
+    summary: "Public banking and payment services.",
+    owner: "Example Bank",
+    sector: "Finance",
+    capabilities: [
+        "banking",
+        "payments",
+        "customer portal",
+    ],
+
+    spiderfoot: {
+        surface: true,
+        surfaceEmails: true,
+        surfaceInfrastructure: true,
+        surfaceDomains: true,
+        surfaceIps: false,
+        surfaceReferences: true,
     },
-];
+});
 ```
 
-With `surfaceEmails: true`, SpiderFoot includes `abuse@example-bank.com` in the indexed content.
+Registering the same `host` twice replaces the earlier entry. `unregisterSpiderFootSite("example-bank.com")` removes it.
 
----
+With `surfaceEmails: true`, SpiderFoot includes `abuse@example-bank.com` in the indexed content.
 
 ## Website Search Behavior
 
@@ -327,5 +310,3 @@ Amsterdam
 Tokyo
 Singapore
 ```
-
----
