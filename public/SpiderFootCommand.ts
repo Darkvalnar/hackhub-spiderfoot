@@ -80,11 +80,11 @@ export class SpiderFootCommand extends Command {
         if (!query || query === "-h" || query === "--help") {
             tools.println("Usage: spiderfoot <target>");
             tools.println("Examples:");
-            tools.println("  spiderfoot victor hale");
-            tools.println("  spiderfoot @victor_hale");
-            tools.println("  spiderfoot example bank");
-            tools.println("  spiderfoot security@example-bank.com");
-            tools.println("  spiderfoot 198.51.100.42");
+            tools.println("  spiderfoot nexacorp");
+            tools.println("  spiderfoot @elena_ross");
+            tools.println("  spiderfoot elena ross");
+            tools.println("  spiderfoot security@nexacorp.com");
+            tools.println("  spiderfoot db.nexacorp.com");
             return;
         }
 

@@ -14,8 +14,6 @@ import {
     normalizeSpiderFootVisibility,
 } from "./SpiderFootNetworkRegistry";
 
-// Mod authors: import your own website classes here and add them to WEBSITE_CLASSES below.
-
 export type { SpiderFootCategory, SpiderFootVisibility };
 
 export interface SpiderFootResult {
@@ -23,11 +21,163 @@ export interface SpiderFootResult {
     value: string;
 }
 
-/**
- * Represents a site that SpiderFoot can index directly (without a full website class).
- * Add entries here to make targets searchable without creating a full website.
- * Each entry surfaces name, summary, owner, sector, host, and optionally abuse@host.
- */
+export type SpiderFootIntelMatch = "exact" | "contains" | "loose";
+
+export interface SpiderFootIntelRegistration {
+    keys: string[];
+    results: SpiderFootResult[];
+    match?: SpiderFootIntelMatch;
+}
+
+interface RegisteredIntelEntry {
+    id: string;
+    keys: string[];
+    match: SpiderFootIntelMatch;
+    results: SpiderFootResult[];
+}
+
+const MIN_LOOSE_MATCH_LENGTH = 3;
+
+const registeredSpiderFootIntel = new Map<string, RegisteredIntelEntry>();
+
+function toIntelRegistration(
+    first: string | SpiderFootIntelRegistration,
+    results?: SpiderFootResult[],
+): SpiderFootIntelRegistration | undefined {
+    if (typeof first === "string") {
+        return {
+            keys: [first],
+            results: results ?? [],
+            match: "exact",
+        };
+    }
+
+    return first;
+}
+
+function normalizeIntelKeys(keys: string[]): string[] {
+    return unique(compact(keys).map((key) => normalize(key)));
+}
+
+function surfaceableIntelResults(results: SpiderFootResult[]): SpiderFootResult[] {
+    return uniqueResults(results.filter((result) => result.category !== "references"));
+}
+
+export function registerSpiderFootIntel(query: string, results: SpiderFootResult[]): void;
+export function registerSpiderFootIntel(registration: SpiderFootIntelRegistration): void;
+export function registerSpiderFootIntel(
+    first: string | SpiderFootIntelRegistration,
+    results?: SpiderFootResult[],
+): void {
+    const registration = toIntelRegistration(first, results);
+
+    if (!registration) {
+        return;
+    }
+
+    const keys = normalizeIntelKeys(registration.keys);
+
+    if (!keys.length) {
+        return;
+    }
+
+    registeredSpiderFootIntel.set(keys[0], {
+        id: keys[0],
+        keys,
+        match: registration.match ?? "exact",
+        results: surfaceableIntelResults(registration.results),
+    });
+}
+
+export function mergeSpiderFootIntel(query: string, results: SpiderFootResult[]): void;
+export function mergeSpiderFootIntel(registration: SpiderFootIntelRegistration): void;
+export function mergeSpiderFootIntel(
+    first: string | SpiderFootIntelRegistration,
+    results?: SpiderFootResult[],
+): void {
+    const registration = toIntelRegistration(first, results);
+
+    if (!registration) {
+        return;
+    }
+
+    const keys = normalizeIntelKeys(registration.keys);
+
+    if (!keys.length) {
+        return;
+    }
+
+    const existing = registeredSpiderFootIntel.get(keys[0]);
+
+    registeredSpiderFootIntel.set(keys[0], {
+        id: keys[0],
+        keys: unique([...(existing?.keys ?? []), ...keys]),
+        match: registration.match ?? existing?.match ?? "exact",
+        results: surfaceableIntelResults([
+            ...(existing?.results ?? []),
+            ...registration.results,
+        ]),
+    });
+}
+
+export function unregisterSpiderFootIntel(query: string): void {
+    const clean = normalize(query);
+
+    if (!clean) {
+        return;
+    }
+
+    for (const [id, entry] of registeredSpiderFootIntel) {
+        if (id === clean || entry.keys.includes(clean)) {
+            registeredSpiderFootIntel.delete(id);
+        }
+    }
+}
+
+function intelEntryMatches(entry: RegisteredIntelEntry, query: string): boolean {
+    for (const key of entry.keys) {
+        if (key === query) {
+            return true;
+        }
+
+        if (
+            entry.match === "exact" ||
+            query.length < MIN_LOOSE_MATCH_LENGTH ||
+            key.length < MIN_LOOSE_MATCH_LENGTH
+        ) {
+            continue;
+        }
+
+        if (entry.match === "contains" && query.includes(key)) {
+            return true;
+        }
+
+        if (entry.match === "loose" && (query.includes(key) || key.includes(query))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function searchRegisteredSpiderFootIntel(query: string): SpiderFootResult[] {
+    const clean = normalize(query);
+
+    if (!clean) {
+        return [];
+    }
+
+    const results: SpiderFootResult[] = [];
+
+    for (const entry of registeredSpiderFootIntel.values()) {
+        if (intelEntryMatches(entry, clean)) {
+            results.push(...entry.results);
+        }
+    }
+
+    return uniqueResults(results);
+}
+
 export interface SpiderFootSiteEntry {
     host: string;
     name: string;
@@ -39,10 +189,138 @@ export interface SpiderFootSiteEntry {
     spiderfoot?: SpiderFootVisibility;
 }
 
-/**
- * Mod authors: add entries here to make targets searchable without a full website class.
- */
 export const SPIDERFOOT_INDEXED_SITES: SpiderFootSiteEntry[] = [];
+
+export function registerSpiderFootSite(entry: SpiderFootSiteEntry): void {
+    const host = normalize(entry?.host);
+
+    if (!host) {
+        return;
+    }
+
+    const index = SPIDERFOOT_INDEXED_SITES.findIndex(
+        (site) => normalize(site.host) === host,
+    );
+
+    if (index >= 0) {
+        SPIDERFOOT_INDEXED_SITES[index] = entry;
+        return;
+    }
+
+    SPIDERFOOT_INDEXED_SITES.push(entry);
+}
+
+export function unregisterSpiderFootSite(host: string): void {
+    const clean = normalize(host);
+
+    if (!clean) {
+        return;
+    }
+
+    for (let index = SPIDERFOOT_INDEXED_SITES.length - 1; index >= 0; index -= 1) {
+        if (normalize(SPIDERFOOT_INDEXED_SITES[index].host) === clean) {
+            SPIDERFOOT_INDEXED_SITES.splice(index, 1);
+        }
+    }
+}
+
+export type WebsiteConstructor = new () => {
+    Host: string;
+    Pages: any[];
+};
+
+const WEBSITE_CLASSES: WebsiteConstructor[] = [];
+
+export function registerSpiderFootWebsite(WebsiteClass: WebsiteConstructor): void {
+    if (typeof WebsiteClass !== "function" || WEBSITE_CLASSES.includes(WebsiteClass)) {
+        return;
+    }
+
+    WEBSITE_CLASSES.push(WebsiteClass);
+}
+
+export function unregisterSpiderFootWebsite(WebsiteClass: WebsiteConstructor): void {
+    const index = WEBSITE_CLASSES.indexOf(WebsiteClass);
+
+    if (index >= 0) {
+        WEBSITE_CLASSES.splice(index, 1);
+    }
+}
+
+export interface SpiderFootDocumentRegistration {
+    host: string;
+    path?: string;
+    title: string;
+    description?: string;
+    search?: string[];
+    html: string;
+    visibility?: SpiderFootVisibility;
+}
+
+const registeredDocuments = new Map<string, SpiderFootDocumentRegistration>();
+
+function documentKey(host: string, path?: string): string {
+    return `${normalize(host)}${normalize(path) || "/"}`;
+}
+
+export function registerSpiderFootDocument(document: SpiderFootDocumentRegistration): void {
+    const host = normalize(document?.host);
+
+    if (!host || typeof document.html !== "string") {
+        return;
+    }
+
+    registeredDocuments.set(documentKey(host, document.path), document);
+}
+
+export function unregisterSpiderFootDocument(host: string, path?: string): void {
+    const clean = normalize(host);
+
+    if (!clean) {
+        return;
+    }
+
+    if (path !== undefined) {
+        registeredDocuments.delete(documentKey(clean, path));
+        return;
+    }
+
+    for (const [key, document] of registeredDocuments) {
+        if (normalize(document.host) === clean) {
+            registeredDocuments.delete(key);
+        }
+    }
+}
+
+export type SpiderFootSearchHook = (query: string) => void;
+
+const searchHooks: SpiderFootSearchHook[] = [];
+
+export function registerSpiderFootSearchHook(fn: SpiderFootSearchHook): void {
+    if (typeof fn !== "function" || searchHooks.includes(fn)) {
+        return;
+    }
+
+    searchHooks.push(fn);
+}
+
+export function unregisterSpiderFootSearchHook(fn: SpiderFootSearchHook): void {
+    const index = searchHooks.indexOf(fn);
+
+    if (index >= 0) {
+        searchHooks.splice(index, 1);
+    }
+}
+
+function runSearchHooks(query: string): void {
+    for (const hook of searchHooks) {
+        try {
+            hook(query);
+        } catch {
+            continue;
+        }
+    }
+}
 
 interface SpiderFootWebDocument {
     host: string;
@@ -98,17 +376,6 @@ function pageMetadata(
         html: metadata.html,
     };
 }
-
-type WebsiteConstructor = new () => {
-    Host: string;
-    Pages: any[];
-};
-
-/**
- * Mod authors: import your website class and add it to this list.
- * Only pages with seo: true are indexed by SpiderFoot.
- */
-const WEBSITE_CLASSES: WebsiteConstructor[] = [];
 
 function normalize(value: unknown): string {
     return String(value ?? "").trim().toLowerCase();
@@ -204,7 +471,21 @@ function extractEmails(text: string): string[] {
 }
 
 function extractHandles(text: string): string[] {
-    return unique(text.match(/@[a-z0-9_]{3,32}/gi) ?? []);
+    const handles: string[] = [];
+
+    for (const match of text.matchAll(/@[a-z0-9_]{3,32}/gi)) {
+        const index = match.index ?? 0;
+        const previous = index > 0 ? text[index - 1] : "";
+        const next = text[index + match[0].length] ?? "";
+
+        if (/[\w.%-]/.test(previous) || next === ".") {
+            continue;
+        }
+
+        handles.push(match[0]);
+    }
+
+    return unique(handles);
 }
 
 function extractContextWindows(text: string, query: string, radius = 260): string[] {
@@ -299,6 +580,7 @@ function findIndexedSiteByHost(host: string): SpiderFootSiteEntry | undefined {
 }
 
 function searchTwotter(query: string): SpiderFootResult[] {
+    ensureTwotterInit();
     const results: SpiderFootResult[] = [];
     const checked = new Set<string>();
 
@@ -320,11 +602,6 @@ function searchTwotter(query: string): SpiderFootResult[] {
 
         push(results, "social", `@${anyUser.username}`);
         push(results, "contacts", displayName);
-        push(results, "references", anyUser.bio);
-
-        if (anyUser.verified) {
-            push(results, "references", "Verified public profile");
-        }
     }
 
     return results;
@@ -334,6 +611,10 @@ function getAllowedWebsiteDocuments(): SpiderFootWebDocument[] {
     const documents: SpiderFootWebDocument[] = [];
 
     for (const WebsiteClass of WEBSITE_CLASSES) {
+        if (typeof WebsiteClass !== "function") {
+            continue;
+        }
+
         const site = new WebsiteClass();
         const sourceSite = findIndexedSiteByHost(site.Host);
         const visibility = siteVisibility(sourceSite);
@@ -390,12 +671,32 @@ function getAllowedWebsiteDocuments(): SpiderFootWebDocument[] {
             description: site.summary,
             search: [
                 site.name,
-                site.owner,
-                site.sector,
+                site.owner ?? "",
+                site.sector ?? "",
                 site.host,
                 ...(site.capabilities ?? []),
             ],
             html,
+            visibility,
+        });
+    }
+
+    for (const document of registeredDocuments.values()) {
+        const visibility = document.visibility
+            ? normalizeSpiderFootVisibility(document.visibility)
+            : siteVisibility(findIndexedSiteByHost(document.host));
+
+        if (!visibility.surface) {
+            continue;
+        }
+
+        documents.push({
+            host: document.host,
+            path: document.path || "/",
+            title: document.title,
+            description: document.description,
+            search: document.search ?? [],
+            html: document.html,
             visibility,
         });
     }
@@ -431,7 +732,7 @@ function searchWebDocuments(query: string): SpiderFootResult[] {
         }
 
         if (visibility.surfaceReferences) {
-            push(results, "references", `${url} — ${document.title}`);
+            push(results, "references", `${url} - ${document.title}`);
 
             const snippet = extractSnippet(
                 compact([
@@ -527,22 +828,6 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
                 registeredTarget.domain,
             );
         }
-
-        if (visibility.surfaceReferences) {
-            if (registeredTarget.domain) {
-                push(
-                    results,
-                    "references",
-                    `Network record associated with ${registeredTarget.domain}`,
-                );
-            } else if (registeredTarget.name) {
-                push(
-                    results,
-                    "references",
-                    `Network record associated with ${registeredTarget.name}`,
-                );
-            }
-        }
     }
 
     for (const subnet of Network.getAllSubnets()) {
@@ -597,20 +882,6 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
 
                 push(results, "locations", location);
             }
-
-            if (visibility.surfaceReferences && domain) {
-                push(
-                    results,
-                    "references",
-                    `Network record associated with ${domain}`,
-                );
-            } else if (visibility.surfaceReferences && name) {
-                push(
-                    results,
-                    "references",
-                    `Network record associated with ${name}`,
-                );
-            }
         }
 
         for (const user of anySubnet.users ?? []) {
@@ -663,23 +934,158 @@ function searchNetworkExact(query: string): SpiderFootResult[] {
             ) {
                 push(results, "infrastructure", domain);
             }
+        }
+    }
 
-            if (
-                visibility.surfaceNetworkUsers &&
-                visibility.surfaceReferences &&
-                domain &&
-                (fullName || email)
-            ) {
-                push(
-                    results,
-                    "references",
-                    `${fullName || email} is listed on ${domain}`,
-                );
+    return results;
+}
+
+export interface SpiderFootPhoneBookListing {
+    name: string;
+    phoneNumber: string;
+    aliases?: string[];
+    organization?: string;
+    role?: string;
+    location?: string;
+    website?: string;
+    visibility?: SpiderFootVisibility;
+}
+
+const PHONE_BOOK_LISTINGS: SpiderFootPhoneBookListing[] = [];
+
+export function registerSpiderFootPhoneBookListing(
+    listing: SpiderFootPhoneBookListing,
+): void {
+    const key = normalize(listing?.phoneNumber) || normalize(listing?.name);
+
+    if (!key) {
+        return;
+    }
+
+    const index = PHONE_BOOK_LISTINGS.findIndex(
+        (entry) => (normalize(entry.phoneNumber) || normalize(entry.name)) === key,
+    );
+
+    if (index >= 0) {
+        PHONE_BOOK_LISTINGS[index] = listing;
+        return;
+    }
+
+    PHONE_BOOK_LISTINGS.push(listing);
+}
+
+export function unregisterSpiderFootPhoneBookListing(phoneNumberOrName: string): void {
+    const clean = normalize(phoneNumberOrName);
+
+    if (!clean) {
+        return;
+    }
+
+    for (let index = PHONE_BOOK_LISTINGS.length - 1; index >= 0; index -= 1) {
+        const entry = PHONE_BOOK_LISTINGS[index];
+
+        if (normalize(entry.phoneNumber) === clean || normalize(entry.name) === clean) {
+            PHONE_BOOK_LISTINGS.splice(index, 1);
+        }
+    }
+}
+
+function searchPhoneBook(query: string): SpiderFootResult[] {
+    const clean = normalize(query);
+
+    if (!clean) {
+        return [];
+    }
+
+    const results: SpiderFootResult[] = [];
+
+    for (const listing of PHONE_BOOK_LISTINGS) {
+        const visibility = normalizeSpiderFootVisibility(listing.visibility);
+
+        if (!visibility.surface) {
+            continue;
+        }
+
+        const searchable = compact([
+            listing.name,
+            listing.phoneNumber,
+            listing.location,
+            ...(listing.aliases ?? []),
+        ]).join(" ").toLowerCase();
+
+        if (!searchable.includes(clean)) {
+            continue;
+        }
+
+        if (visibility.surfaceContacts) {
+            push(results, "contacts", listing.name);
+            push(results, "contacts", listing.phoneNumber);
+        }
+
+        if (
+            visibility.surfaceInfrastructure &&
+            visibility.surfaceDomains &&
+            listing.website
+        ) {
+            push(results, "infrastructure", listing.website);
+        }
+
+        if (visibility.surfaceLocations) {
+            push(results, "locations", listing.location);
+        }
+
+        if (visibility.surfaceReferences) {
+            push(
+                results,
+                "references",
+                `Phone book listing: ${listing.name}${
+                    listing.organization ? ` - ${listing.organization}` : ""
+                }`,
+            );
+
+            if (listing.role) {
+                push(results, "references", listing.role);
             }
         }
     }
 
     return results;
+}
+
+const twotterInitializers: Array<() => void> = [];
+const completedTwotterInitializers = new Set<() => void>();
+
+export function registerTwotterInit(fn: () => void): void {
+    if (typeof fn !== "function" || twotterInitializers.includes(fn)) {
+        return;
+    }
+
+    twotterInitializers.push(fn);
+}
+
+export function unregisterTwotterInit(fn: () => void): void {
+    const index = twotterInitializers.indexOf(fn);
+
+    if (index >= 0) {
+        twotterInitializers.splice(index, 1);
+    }
+
+    completedTwotterInitializers.delete(fn);
+}
+
+function ensureTwotterInit(): void {
+    for (const fn of twotterInitializers) {
+        if (completedTwotterInitializers.has(fn)) {
+            continue;
+        }
+
+        try {
+            fn();
+            completedTwotterInitializers.add(fn);
+        } catch {
+            continue;
+        }
+    }
 }
 
 export function searchSpiderFoot(query: string): SpiderFootResult[] {
@@ -689,9 +1095,13 @@ export function searchSpiderFoot(query: string): SpiderFootResult[] {
         return [];
     }
 
+    runSearchHooks(clean);
+
     return uniqueResults([
         ...searchTwotter(clean),
         ...searchWebDocuments(clean),
         ...searchNetworkExact(clean),
+        ...searchPhoneBook(clean),
+        ...searchRegisteredSpiderFootIntel(clean),
     ]);
 }

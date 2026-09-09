@@ -52,6 +52,7 @@ export interface SpiderFootNetworkRegistration {
     visibility?: SpiderFootVisibility;
 }
 
+
 export interface RegisteredSpiderFootNetworkTarget {
     sourceKey: string;
     ip: string;
@@ -97,6 +98,7 @@ export function registerSpiderFootNetworkTarget(
     if (!sourceKey || !ip) {
         return;
     }
+
     const visibility = normalizeSpiderFootVisibility(
         registration.visibility,
     );
@@ -120,6 +122,7 @@ export function registerSpiderFootNetworkTarget(
         visibility,
     });
 }
+
 
 export function findRegisteredSpiderFootNetworkTarget(
     query: string,
