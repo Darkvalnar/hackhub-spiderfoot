@@ -26,6 +26,7 @@ This guide is based on the following implementation behavior:
 
 | Behavior | Source file |
 |---|---|
-| Command name, help examples, printed sections, event emission | `SpiderFootCommand.ts` |
+| Command name, help examples, printed sections, `SpiderFoot.Search` emission | `SpiderFootCommand.ts` |
 | Twotter search, website indexing, SPIDERFOOT_INDEXED_SITES indexing, network exact search | `SpiderFootIntel.ts` |
 | Visibility defaults, hidden visibility, network registration, visibility lookup order | `SpiderFootNetworkRegistry.ts` |
+| Shared key names, cross-mod contribution publishing and withdrawal, `SpiderFoot.Ready`, `SpiderFoot.SearchStarting` and `SpiderFoot.ContributionsChanged` emission | `SpiderFootBridge.ts` |
